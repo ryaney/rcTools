@@ -1,4 +1,4 @@
-package org.demo.concurrent.structure;
+package org.demo.concurrent.structure.list;
 
 import java.util.Comparator;
 import java.util.List;

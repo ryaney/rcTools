@@ -1,4 +1,4 @@
-package org.demo.concurrent.structure;
+package org.demo.concurrent.structure.list;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
