@@ -12,7 +12,7 @@ import java.util.*;
  * @time: 22:18
  * @desc:
  */
-public class IntObjectConcurrentMap<V> implements IntObjectMap<V> {
+public class IntObjectConcurrentMap<V extends ISequence> implements IntObjectMap<V> {
 
     /** Default initial capacity. Used if not specified in the constructor */
     public static final int DEFAULT_CAPACITY = 8;
@@ -24,7 +24,16 @@ public class IntObjectConcurrentMap<V> implements IntObjectMap<V> {
      * Placeholder for null values, so we can use the actual null to mean available.
      * (Better than using a placeholder for available: less references for GC processing.)
      */
-    private static final Object NULL_VALUE = new Object();
+    private static final Object NULL_VALUE = new ISequence() {
+        @Override
+        public long getSequence() {
+            return -1;
+        }
+
+        @Override
+        public void updateSequence(long sequence) {
+        }
+    };
 
     /** The maximum number of elements allowed without allocating more space. */
     private int maxSize;
@@ -36,6 +45,8 @@ public class IntObjectConcurrentMap<V> implements IntObjectMap<V> {
     private V[] values;
     private int size;
     private int mask;
+
+    private volatile long sequence = 0;
 
     private final Set<Integer> keySet = new KeySet();
     private final Set<Entry<Integer, V>> entrySet = new EntrySet();
@@ -70,7 +81,7 @@ public class IntObjectConcurrentMap<V> implements IntObjectMap<V> {
         // Allocate the arrays.
         keys = new int[capacity];
         @SuppressWarnings({ "unchecked", "SuspiciousArrayCast" })
-        V[] temp = (V[]) new Object[capacity];
+        V[] temp = (V[]) new ISequence[capacity];
         values = temp;
 
         // Initialize the maximum size value.
@@ -102,14 +113,22 @@ public class IntObjectConcurrentMap<V> implements IntObjectMap<V> {
             if (values[index] == null) {
                 // Found empty slot, use it.
                 keys[index] = key;
-                values[index] = toInternal(value);
+                V internalValue = toInternal(value);
+                long seq = this.sequence + 1;
+                internalValue.updateSequence(seq);
+                values[index] = internalValue;
                 growSize();
+                this.sequence = seq;
                 return null;
             }
             if (keys[index] == key) {
                 // Found existing entry with this key, just replace the value.
                 V previousValue = values[index];
-                values[index] = toInternal(value);
+                V internalValue = toInternal(value);
+                long seq = this.sequence + 1;
+                internalValue.updateSequence(seq);
+                values[index] = internalValue;
+                this.sequence = seq;
                 return toExternal(previousValue);
             }
 
@@ -575,7 +594,8 @@ public class IntObjectConcurrentMap<V> implements IntObjectMap<V> {
         private int entryIndex = -1;
 
         private void scanNext() {
-            while (++nextIndex != values.length && values[nextIndex] == null) {
+            while (++nextIndex != values.length && (values[nextIndex] == null
+                    || (values[nextIndex] != null && values[nextIndex].getSequence() > sequence))) {
             }
         }
 
