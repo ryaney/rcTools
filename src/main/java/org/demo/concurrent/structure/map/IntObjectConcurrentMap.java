@@ -169,6 +169,7 @@ public class IntObjectConcurrentMap<V extends ISequence> implements IntObjectMap
         }
 
         V prev = values[index];
+        prev.updateSequence(sequence + 1);
         removeAt(index);
         return toExternal(prev);
     }
@@ -451,7 +452,7 @@ public class IntObjectConcurrentMap<V extends ISequence> implements IntObjectMap
 
         keys = new int[newCapacity];
         @SuppressWarnings({ "unchecked", "SuspiciousArrayCast" })
-        V[] temp = (V[]) new Object[newCapacity];
+        V[] temp = (V[]) new ISequence[newCapacity];
         values = temp;
 
         maxSize = calcMaxSize(newCapacity);
@@ -593,16 +594,20 @@ public class IntObjectConcurrentMap<V extends ISequence> implements IntObjectMap
         private int nextIndex = -1;
         private int entryIndex = -1;
 
-        private void scanNext() {
-            while (++nextIndex != values.length && (values[nextIndex] == null
-                    || (values[nextIndex] != null && values[nextIndex].getSequence() > sequence))) {
+        private V value = null;
+
+        private void scanNext(boolean useValue) {
+            V localValue = null;
+            while (++nextIndex != values.length && ((localValue = values[nextIndex]) == null
+                    || ((localValue = values[nextIndex]) != null && values[nextIndex].getSequence() > sequence))) {
             }
+            value = useValue ? localValue : value;
         }
 
         @Override
         public boolean hasNext() {
             if (nextIndex == -1) {
-                scanNext();
+                scanNext(true);
             }
             return nextIndex != values.length;
         }
@@ -614,7 +619,7 @@ public class IntObjectConcurrentMap<V extends ISequence> implements IntObjectMap
             }
 
             prevIndex = nextIndex;
-            scanNext();
+            scanNext(false);
 
             // Always return the same Entry object, just change its index each time.
             entryIndex = prevIndex;
@@ -673,7 +678,7 @@ public class IntObjectConcurrentMap<V extends ISequence> implements IntObjectMap
 
             iter.next();
 
-            return new MapEntry(iter.entryIndex);
+            return new MapEntry(iter.entryIndex, iter.value);
         }
 
         @Override
@@ -688,33 +693,42 @@ public class IntObjectConcurrentMap<V extends ISequence> implements IntObjectMap
     final class MapEntry implements Entry<Integer, V> {
         private final int entryIndex;
 
-        MapEntry(int entryIndex) {
+        private final V value;
+
+        MapEntry(int entryIndex, V value) {
             this.entryIndex = entryIndex;
+            this.value = value;
         }
 
         @Override
         public Integer getKey() {
-            verifyExists();
+            verifyExists(value);
             return keys[entryIndex];
         }
 
         @Override
         public V getValue() {
-            verifyExists();
-            return toExternal(values[entryIndex]);
+            verifyExists(value);
+            return toExternal(value);
         }
 
         @Override
         public V setValue(V value) {
-            verifyExists();
-            V prevValue = toExternal(values[entryIndex]);
+            verifyExists(this.value);
+            V prevValue = toExternal(this.value);
             values[entryIndex] = toInternal(value);
             return prevValue;
         }
 
         private void verifyExists() {
             if (values[entryIndex] == null) {
-                throw new IllegalStateException("The map entry has been removed");
+                throw new IllegalStateException("The map entry has been removed: " + entryIndex);
+            }
+        }
+
+        private void verifyExists(V value) {
+            if (value == null && values[entryIndex] == null) {
+                throw new IllegalStateException("The map entry has been removed: " + entryIndex);
             }
         }
     }
