@@ -140,16 +140,76 @@ public class FastUtilIndexedMap<K, V> extends AbstractMap<K, V> {
 
         @Override
         public Collection<V> values() {
-            List<V> result = new ArrayList<>(size());
-            forEachValue(result::add);
-            return result;
+            return new AbstractCollection<>() {
+                @Override
+                public Iterator<V> iterator() {
+                    return new CompositeIterator<>(shards, map -> map.values().iterator());
+                }
+
+                @Override
+                public void forEach(Consumer<? super V> action) {
+                    CompositeView.this.forEachValue(action::accept);
+                }
+
+                @Override
+                public int size() { return CompositeView.this.size(); }
+            };
         }
 
         @Override
         public Set<Entry<K, V>> entrySet() {
-            Set<Entry<K, V>> result = new LinkedHashSet<>(size());
-            forEach((k, v) -> result.add(new SimpleImmutableEntry<>(k, v)));
-            return result;
+            return new AbstractSet<>() {
+                @Override
+                public Iterator<Entry<K, V>> iterator() {
+                    return new CompositeIterator<>(shards, map -> map.entrySet().iterator());
+                }
+
+                @Override
+                public void forEach(Consumer<? super Entry<K, V>> action) {
+                    CompositeView.this.forEach((k, v) -> action.accept(new SimpleImmutableEntry<>(k, v)));
+                }
+
+                @Override
+                public int size() { return CompositeView.this.size(); }
+            };
+        }
+
+        /**
+         * 串联多个 shard 的 Iterator，零拷贝惰性遍历。
+         */
+        private static class CompositeIterator<K, V, T> implements Iterator<T> {
+            private final Map<K, V>[] shards;
+            private final Function<Map<K, V>, Iterator<T>> iteratorFactory;
+            private int shardIdx;
+            private Iterator<T> current;
+
+            CompositeIterator(Map<K, V>[] shards, Function<Map<K, V>, Iterator<T>> factory) {
+                this.shards = shards;
+                this.iteratorFactory = factory;
+                this.shardIdx = 0;
+                this.current = Collections.emptyIterator();
+                advanceToNextShard();
+            }
+
+            private void advanceToNextShard() {
+                while (!current.hasNext() && shardIdx < shards.length) {
+                    Map<K, V> shard = shards[shardIdx++];
+                    if (shard != null) {
+                        current = iteratorFactory.apply(shard);
+                    }
+                }
+            }
+
+            @Override
+            public boolean hasNext() { return current.hasNext(); }
+
+            @Override
+            public T next() {
+                if (!current.hasNext()) throw new NoSuchElementException();
+                T val = current.next();
+                if (!current.hasNext()) advanceToNextShard();
+                return val;
+            }
         }
 
         @Override
