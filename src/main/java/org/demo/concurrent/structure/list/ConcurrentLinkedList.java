@@ -11,9 +11,9 @@ import static java.util.Collections.emptyIterator;
 import static java.util.Collections.emptyListIterator;
 
 /**
- * @author: ryan_shi@126.com
- * @date: 2023/7/14 22:11
- * @descrption:
+ * @author ryan_scy@126.com
+ * @since 2023/7/14 22:11
+ * @description
  */
 public class ConcurrentLinkedList<E> extends AbstractSequentialList<E> implements INodeLinkedList<E> {
 
