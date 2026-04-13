@@ -1,4 +1,4 @@
-package org.demo.concurrent.structure.map;
+package org.rctools.structure.concurrent.map;
 
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 
